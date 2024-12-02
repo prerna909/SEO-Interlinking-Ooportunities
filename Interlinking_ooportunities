@@ -105,11 +105,8 @@ def main():
     # Define search terms related to 'MBA in USA'
     search_terms = [
         "MBA in USA", 
-        "study abroad MBA", 
-        "best MBA programs in USA", 
-        "top MBA colleges in USA", 
+        "MBA programs in USA", 
         "study MBA USA", 
-        "MBA study options USA"
     ]
     
     # Get recommended pages for internal linking
