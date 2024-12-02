@@ -1,0 +1,124 @@
+import os
+import logging
+import googleapiclient.discovery
+import googleapiclient.errors
+import google.auth
+from urllib.parse import urlparse, urljoin
+import requests
+from bs4 import BeautifulSoup
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+
+# Function to get search results from Google Custom Search API
+def get_search_results(query, api_key, search_engine_id):
+    logging.info(f"Performing Google search for: {query}")
+    
+    # Build the service object to interact with the Google Custom Search API
+    service = googleapiclient.discovery.build("customsearch", "v1", developerKey=api_key)
+    
+    # Execute the search query
+    res = service.cse().list(q=query, cx=search_engine_id).execute()
+
+    return res.get('items', [])
+
+# Normalize URL: Strip out unnecessary fragments and parameters
+def normalize_url(url):
+    parsed_url = urlparse(url)
+    normalized_url = parsed_url._replace(fragment='', query='').geturl()
+    return normalized_url
+
+# Function to check if a page already links to the target page
+def page_links_to_target(page_url, target_url):
+    try:
+        response = requests.get(page_url)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Find all anchor tags
+        anchor_tags = soup.find_all('a', href=True)
+        
+        # Check if any anchor tag links to the target page
+        for anchor in anchor_tags:
+            href = anchor['href']
+            if normalize_url(href) == normalize_url(target_url):  # Compare normalized URLs
+                return True
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Error fetching {page_url}: {e}")
+    
+    return False
+
+# Function to recommend pages based on search results (excluding existing links)
+def recommend_interlinking_pages(target_url, api_key, search_engine_id, existing_links, search_terms):
+    recommended_pages = []
+    
+    for search_term in search_terms:
+        query = f"{search_term}"  # Searching for related pages to the target page
+        
+        # Get the search results
+        search_results = get_search_results(query, api_key, search_engine_id)
+        
+        for item in search_results:
+            link = item.get('link')
+            if link and normalize_url(link) not in existing_links:  # Check if it's not already linked
+                # Check if the page already links to the target page
+                if not page_links_to_target(link, target_url):  # Exclude if it already links
+                    recommended_pages.append(link)
+    
+    return recommended_pages
+
+# Function to extract internal links from a website
+def get_internal_links(url):
+    internal_links = set()  # To store unique internal links
+    try:
+        response = requests.get(url)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Find all anchor tags
+        anchor_tags = soup.find_all('a', href=True)
+        
+        for anchor in anchor_tags:
+            href = anchor['href']
+            # Check if the link is internal (same domain)
+            if href.startswith('/') or urlparse(href).netloc == urlparse(url).netloc:
+                full_url = urljoin(url, href)  # Construct full URL
+                internal_links.add(normalize_url(full_url))  # Normalize URL to avoid mismatches
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Error fetching {url}: {e}")
+    
+    return internal_links
+
+# Example usage of the function
+def main():
+    # API keys and credentials
+    api_key = "AIzaSyBr2qmkZZ9KhKZ31xHLYts_tk01f8h59_s"  # Replace with your Google API key
+    search_engine_id = "02430706cef42424a"  # Replace with your Google Custom Search Engine ID
+    
+    # Your target URL (the page you want to find internal links for)
+    target_url = "https://yocket.com/blog/mba-in-us"  # Your target page URL
+    
+    # Get internal links that already link to the target page
+    internal_links = get_internal_links("https://www.yocket.com/")  # Replace with the URL of your homepage or the starting point of the crawl
+    
+    # Filter out links that are not related to the target page
+    existing_links = {normalize_url(link) for link in internal_links if normalize_url(target_url) in normalize_url(link)}  # Filter out links already pointing to the target URL
+    
+    # Define search terms related to 'MBA in USA'
+    search_terms = [
+        "MBA in USA", 
+        "study abroad MBA", 
+        "best MBA programs in USA", 
+        "top MBA colleges in USA", 
+        "study MBA USA", 
+        "MBA study options USA"
+    ]
+    
+    # Get recommended pages for internal linking
+    recommended_pages = recommend_interlinking_pages(target_url, api_key, search_engine_id, existing_links, search_terms)
+    
+    logging.info("Recommended pages for interlinking (where target URL is not interlinked):")
+    for page in recommended_pages:  #changed
+        print(page)  #changed
+
+# Run the main function
+if __name__ == "__main__":
+    main()
